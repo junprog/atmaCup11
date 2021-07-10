@@ -26,26 +26,6 @@ techniques_path = os.path.join(DATA_DIR, 'techniques.csv')
 
 test_df = pd.read_csv(test_csv_path)
 
-class atmaDataset(data.Dataset):
-    def __init__(self, img_name_df, target_df, trans):
-        self.img_name = list(img_name_df)
-        self.label = list(target_df)
-
-        self.trans = trans
-
-    def __len__(self):
-        return len(self.img_name)
-
-    def __getitem__(self, idx):
-        img_path = os.path.join(DATA_DIR, 'photos', self.img_name[idx] + '.jpg')
-        img = Image.open(img_path)
-        img = self.trans(img)
-
-        tar = self.label[idx]
-        tar = torch.tensor(tar, dtype=torch.float32).unsqueeze(-1)
-
-        return img, tar
-
 class ResNet18(pl.LightningModule):
     def __init__(self, out_dim=1):
         super().__init__()
