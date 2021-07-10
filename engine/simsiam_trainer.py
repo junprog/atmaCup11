@@ -33,7 +33,6 @@ class SimSiamTrainer(Trainer):
         self.graph = GraphPlotter(self.save_dir, ['NegCosineSim'], 'simsiam')
 
         self.data_dir = args.data_dir
-        self.save_dir = args.save_dir
         
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -156,7 +155,7 @@ class SimSiamTrainer(Trainer):
         epoch_start = time.time()
         self.model.train()  # Set model to training mode
 
-        for (input1, input2), _, _ in tqdm(self.train_dataloader):
+        for (input1, input2), _, _ in tqdm(self.train_dataloader, ncols=60):
             input1 = input1.to(self.device)
             input2 = input2.to(self.device)
 
@@ -169,11 +168,10 @@ class SimSiamTrainer(Trainer):
                 self.optimizer.step()
                 self.scheduler.step()
 
-
         logging.info('Epoch {} Train, Loss: {:.5f}, lr: {:.5f}, Cost {:.1f} sec'
                      .format(self.epoch, epoch_loss.get_avg(), self.optimizer.param_groups[0]['lr'], time.time()-epoch_start))
         
-        self.graph(self.epoch, epoch_loss.get_avg())
+        self.graph(self.epoch, [epoch_loss.get_avg()])
 
         if epoch % self.args.check_point == 0:
             model_state_dic = self.model.state_dict()
@@ -192,7 +190,7 @@ class SimSiamTrainer(Trainer):
 
         embeddings = []
         filenames = []
-        for input1, _, fnames in tqdm(self.val_dataloader):
+        for input1, _, fnames in tqdm(self.val_dataloader, ncols=60):
             input1 = input1.to(self.device)
 
             with torch.set_grad_enabled(False):
@@ -213,8 +211,8 @@ class SimSiamTrainer(Trainer):
         logging.info('Epoch {} Val, Loss: {:.5f}, Cost {:.1f} sec'
                      .format(self.epoch, epoch_loss.get_avg(), time.time()-epoch_start))
 
-        get_scatter_plot_with_thumbnails(epoch, embeddings_2d, self.data_dir, self.save_dir, filenames)
-        self.vis(self.epoch, epoch_loss.get_avg(), 'vl')
+        if epoch % 10 == 0:
+            get_scatter_plot_with_thumbnails(epoch, embeddings_2d, self.data_dir, self.save_dir, filenames)
 
         model_state_dic = self.model.state_dict()
         if self.best_loss > epoch_loss.get_avg():
