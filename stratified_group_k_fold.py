@@ -3,6 +3,14 @@ import numpy as np
 import pandas as pd
 from collections import Counter, defaultdict
 
+"""
+y:                          --- train['target'] ( = {0, 1, 2, 3})
+groups:     
+    train['art_series']     --- train['art_series'] (groups = {0, 1, 2, 3})
+    material['']
+    techniques['']
+"""
+
 def stratified_group_k_fold(X, y, groups, k, seed=None):
     labels_num = np.max(y) + 1
     y_counts_per_group = defaultdict(lambda: np.zeros(labels_num))

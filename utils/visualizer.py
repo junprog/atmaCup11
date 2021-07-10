@@ -14,9 +14,9 @@ import torchvision.transforms.functional as functional
 
 ## metrics epoch のグラフ表示
 class GraphPlotter:
-    def __init__(self, save_dir, metrics: list, prefix):
+    def __init__(self, save_dir, metrics: list, suffix):
         self.save_dir = save_dir
-        self.graph_name = 'result_{}.png'.format(prefix)
+        self.graph_name = 'result_{}.png'.format(suffix)
         self.metrics = metrics
 
         self.epochs = []
