@@ -76,8 +76,9 @@ val_transforms = transforms.Compose([
 
 submission = pd.DataFrame()
 
-res = np.zeros((len(test_df), 1), dtype=np.float32)
-for model_path in ['lightning_logs/version_0/checkpoints/epoch=44-step=2204.ckpt', 'lightning_logs/version_1/checkpoints/epoch=91-step=4507.ckpt', 'lightning_logs/version_2/checkpoints/epoch=67-step=3331.ckpt', 'lightning_logs/version_3/checkpoints/epoch=84-step=4164.ckpt', 'lightning_logs/version_4/checkpoints/epoch=94-step=4654.ckpt']:
+#res = np.zeros((len(test_df), 1), dtype=np.float32)
+res = np.zeros((6, 1), dtype=np.float32)
+for model_path in ['lightning_logs/exp01/version_0/checkpoints/epoch=44-step=2204.ckpt', 'lightning_logs/exp01/version_1/checkpoints/epoch=91-step=4507.ckpt', 'lightning_logs/exp01/version_2/checkpoints/epoch=67-step=3331.ckpt', 'lightning_logs/exp01/version_3/checkpoints/epoch=84-step=4164.ckpt', 'lightning_logs/exp01/version_4/checkpoints/epoch=94-step=4654.ckpt']:
     cv_res = []
     model = ResNet18().load_from_checkpoint(model_path).eval().cuda()
     for i, test in enumerate(tqdm(test_df['object_id'])):
@@ -93,7 +94,5 @@ for model_path in ['lightning_logs/version_0/checkpoints/epoch=44-step=2204.ckpt
 
     res += np.array(cv_res)
 
-res = res / 5
-
-submission['target'] = list(res)
-submission[['target']].to_csv('submission.csv', index=False)
+submission['target'] = list(np.squeeze(res / 5))
+submission['target'].to_csv('submission.csv', index=False)
