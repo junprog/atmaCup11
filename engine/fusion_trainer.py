@@ -10,7 +10,7 @@ from sklearn.model_selection import StratifiedGroupKFold
 
 import torch
 import torch.nn as nn
-from torch import optim
+from torch.optim import lr_scheduler
 import torchvision
 from torchvision import transforms
 
@@ -114,10 +114,12 @@ class FusionTrainer(Trainer):
 
             lr = 0.01
 
-            self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+
+            self.scheduler = lr_scheduler.MultiStepLR(self.optimizer, milestones=[25, 50, 75, 90], gamma=0.1)
 
             self.start_epoch = 0
-            self.best_loss = 0
+            self.best_loss = np.Inf
             
             if args.resume:
                 suf = args.resume.rsplit('.', 1)[-1]
