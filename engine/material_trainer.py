@@ -83,7 +83,7 @@ class MaterialTrainer(Trainer):
             weight_decay=5e-4
         )
 
-        self.scheduler = lr_scheduler.MultiStepLR(self.optimizer, milestones=[50, 75, 90], gamma=0.1)
+        self.scheduler = lr_scheduler.MultiStepLR(self.optimizer, milestones=[25, 50, 75, 90], gamma=0.1)
 
         self.start_epoch = 0
         self.best_acc = 0
@@ -122,6 +122,9 @@ class MaterialTrainer(Trainer):
         args = self.args
 
         for i, (train, val) in enumerate(self.kf.split(self.encoded_material_df)):
+
+            self.start_epoch = 0
+            self.best_acc = 0
 
             if not os.path.exists(os.path.join(self.save_dir, 'cv_' + str(i))):
                 os.mkdir(os.path.join(self.save_dir, 'cv_' + str(i)))
@@ -163,7 +166,7 @@ class MaterialTrainer(Trainer):
             for epoch in range(self.start_epoch, args.max_epoch):
                 logging.info('-'*5 + 'Epoch {}/{}'.format(epoch, args.max_epoch - 1) + '-'*5)
                 self.epoch = epoch
-                
+
                 self.train_epoch(epoch, i)
                 self.scheduler.step()
 
