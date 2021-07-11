@@ -14,7 +14,7 @@ from torch.optim import lr_scheduler
 import torchvision
 
 # refer to https://www.guruguru.science/competitions/17/discussions/a39d588e-aff2-4728-8323-b07f15563552/
-# contrastive leaning dataset, loss support
+# contrastive leaning datasets support
 import lightly
 
 from engine.trainer import Trainer
