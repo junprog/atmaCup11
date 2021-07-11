@@ -5,14 +5,14 @@ from PIL import Image
 import torch
 import torch.utils.data as data
 
-class atmaDataset(data.Dataset):
+class MaterialAtmaDataset(data.Dataset):
     """画像とtargetを返すdataset
     """
     def __init__(self, data_dir, img_name_df, target_df, trans):
         self.data_dir = data_dir
 
         self.img_name = list(img_name_df)
-        self.label = list(target_df)
+        self.label = list(target_df.values)
 
         self.trans = trans
 
@@ -25,6 +25,6 @@ class atmaDataset(data.Dataset):
         img = self.trans(img)
 
         tar = self.label[idx]
-        tar = torch.tensor(tar, dtype=torch.float32).unsqueeze(-1)
+        tar = torch.Tensor(list(tar))
 
         return img, tar

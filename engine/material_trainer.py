@@ -16,7 +16,7 @@ from torchvision import transforms
 
 from engine.trainer import Trainer
 
-from datasets.atma_dataset import atmaDataset
+from datasets.atma_dataset import MaterialAtmaDataset
 from datasets.one_hot_encode import one_hot_encode
 
 from models.resnet import ResNet
@@ -29,7 +29,6 @@ class MaterialTrainer(Trainer):
     def setup(self):
         """initialize the datasets, model, loss and optimizer"""
         args = self.args
-        self.graph = GraphPlotter(self.save_dir, ['BCEwithlogits', 'accuracy'], 'material_classify')
 
         self.data_dir = args.data_dir
         
@@ -42,7 +41,7 @@ class MaterialTrainer(Trainer):
 
         train_csv_path = os.path.join(self.data_dir, 'train.csv')
         #test_csv_path = os.path.join(self.data_dir, 'test.csv')
-        material_path = os.path.join(self.data_dir, 'material.csv')
+        material_path = os.path.join(self.data_dir, 'materials.csv')
         #techniques_path = os.path.join(self.data_dir, 'techniques.csv')
         self.img_path = os.path.join(self.data_dir, 'photos')
 
@@ -74,7 +73,7 @@ class MaterialTrainer(Trainer):
         self.criterion = nn.BCEWithLogitsLoss()
         self.criterion.to(self.device)
 
-        lr = 0.1 * args.batch_size / 256
+        lr = 0.1
 
         self.optimizer = optim.SGD(
             self.model.parameters(),
@@ -104,18 +103,25 @@ class MaterialTrainer(Trainer):
         """training process"""
         args = self.args
 
-        for train, val in self.kf(self.encoded_material_df):
-            train_dataset = atmaDataset(
+        for i, (train, val) in enumerate(self.kf.split(self.encoded_material_df)):
+
+            if not os.path.exists(os.path.join(self.save_dir, 'cv_' + str(i))):
+                os.mkdir(os.path.join(self.save_dir, 'cv_' + str(i)))
+
+            self.tr_graph = GraphPlotter(os.path.join(self.save_dir, 'cv_' + str(i)), ['BCEwithlogits', 'accuracy'], 'train')
+            self.vl_graph = GraphPlotter(os.path.join(self.save_dir, 'cv_' + str(i)), ['BCEwithlogits', 'accuracy'], 'val')
+
+            train_dataset = MaterialAtmaDataset(
                 data_dir = self.img_path,
                 img_name_df = self.encoded_material_df.object_id[train],
-                target_df = self.encoded_material_df.drop('object_id', axis=1)[train],
+                target_df = self.encoded_material_df.drop('object_id', axis=1).loc[train],
                 trans = self.train_transforms
             )
 
-            val_dataset = atmaDataset(
+            val_dataset = MaterialAtmaDataset(
                 data_dir = self.img_path,
                 img_name_df = self.encoded_material_df.object_id[val],
-                target_df = self.encoded_material_df.drop('object_id', axis=1)[val],
+                target_df = self.encoded_material_df.drop('object_id', axis=1).loc[val],
                 trans = self.val_transforms
             )
 
@@ -125,18 +131,18 @@ class MaterialTrainer(Trainer):
             for epoch in range(self.start_epoch, args.max_epoch):
                 logging.info('-'*5 + 'Epoch {}/{}'.format(epoch, args.max_epoch - 1) + '-'*5)
                 self.epoch = epoch
-                self.train_epoch(epoch)
+                self.train_epoch(epoch, i)
                 if epoch % args.val_epoch == 0 and epoch >= args.val_start:
-                    self.val_epoch(epoch)
+                    self.val_epoch(epoch, i)
 
-    def train_epoch(self, epoch):
+    def train_epoch(self, epoch, i):
         epoch_loss = AverageMeter()
         epoch_acc = AverageMeter()
 
         epoch_start = time.time()
         self.model.train()  # Set model to training mode
 
-        for inputs, target in tqdm(self.train_dataloader, ncols=60):
+        for inputs, target in tqdm(self.train_loader, ncols=60):
             inputs = inputs.to(self.device)
             target = target.to(self.device)
 
@@ -145,7 +151,7 @@ class MaterialTrainer(Trainer):
                 loss = self.criterion(outputs, target)
 
                 epoch_loss.update(loss.item(), inputs.size(0))
-                epoch_acc.update(calc_accuracy(outputs.item(), target.item()), inputs.size(0))
+                epoch_acc.update(calc_accuracy(outputs, target), inputs.size(0))
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -155,11 +161,11 @@ class MaterialTrainer(Trainer):
         logging.info('Epoch {} Train, Acc: {:.5f}, Loss: {:.5f}, lr: {:.5f}, Cost {:.1f} sec'
                      .format(self.epoch, epoch_acc.get_avg(), epoch_loss.get_avg(), self.optimizer.param_groups[0]['lr'], time.time()-epoch_start))
         
-        self.graph(self.epoch, [epoch_loss.get_avg(), epoch_acc.get_avg()])
+        self.tr_graph(self.epoch, [epoch_loss.get_avg(), epoch_acc.get_avg()])
 
         if epoch % self.args.check_point == 0:
             model_state_dic = self.model.state_dict()
-            save_path = os.path.join(self.save_dir, '{}_ckpt.tar'.format(self.epoch))
+            save_path = os.path.join(self.save_dir, 'cv_' + str(i),  '{}_ckpt.tar'.format(self.epoch))
             torch.save({
                 'epoch': self.epoch,
                 'optimizer_state_dict': self.optimizer.state_dict(),
@@ -167,27 +173,30 @@ class MaterialTrainer(Trainer):
             }, save_path)
             self.save_list.append(save_path)  # control the number of saved models
 
-    def val_epoch(self, epoch):
+    def val_epoch(self, epoch, i):
         epoch_start = time.time()
         self.model.eval()  # Set model to evaluate mode
         epoch_loss = AverageMeter()
         epoch_acc = AverageMeter()
 
-        for inputs, target in tqdm(self.val_dataloader, ncols=60):
+        for inputs, target in tqdm(self.val_loader, ncols=60):
             inputs = inputs.to(self.device)
+            target = target.to(self.device)
 
             with torch.set_grad_enabled(False):
                 outputs = self.model(inputs)
                 loss = self.criterion(outputs, target)
 
             epoch_loss.update(loss.item(), inputs.size(0))
-            epoch_acc.update(calc_accuracy(outputs.item(), target.item()), inputs.size(0))
+            epoch_acc.update(calc_accuracy(outputs, target), inputs.size(0))
 
         logging.info('Epoch {} Val, Acc: {:.5f}, Loss: {:.5f}, Cost {:.1f} sec'
                      .format(self.epoch, epoch_acc.get_avg(), epoch_loss.get_avg(), time.time()-epoch_start))
+
+        self.vl_graph(self.epoch, [epoch_loss.get_avg(), epoch_acc.get_avg()])
 
         model_state_dic = self.model.state_dict()
         if self.best_loss > epoch_loss.get_avg():
             self.best_loss = epoch_loss.get_avg()
             logging.info("save min loss {:.2f} model epoch {}".format(self.best_loss, self.epoch))
-            torch.save(model_state_dic, os.path.join(self.save_dir, 'best_model.pth'))
+            torch.save(model_state_dic, os.path.join(self.save_dir, 'cv_' + str(i), 'best_model.pth'))

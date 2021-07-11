@@ -12,5 +12,6 @@ class ResNet(nn.Module):
 
     def forward(self, x):
         x = self.feature(x)
+        x = x.squeeze()
         out = self.fc(x)
         return out
