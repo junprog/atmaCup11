@@ -181,7 +181,7 @@ class MaterialTrainer(Trainer):
         self.model.train()  # Set model to training mode
 
         ## freeze feature until 60 epoch
-        if epoch < 60:
+        if epoch < 40:
             for params in self.model.feature.parameters():
                 params.requires_grad = False
         else:
