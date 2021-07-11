@@ -17,7 +17,7 @@ from torchvision import transforms
 
 from engine.trainer import Trainer
 
-from datasets.atma_dataset import MaterialAtmaDataset
+from datasets.atma_dataset import AtmaDataset
 from datasets.one_hot_encode import one_hot_encode
 
 from models.resnet import ResNet
@@ -101,14 +101,14 @@ class MaterialTrainer(Trainer):
             self.tr_graph = GraphPlotter(os.path.join(self.save_dir, 'cv_' + str(i)), ['BCEwithlogits', 'accuracy'], 'train')
             self.vl_graph = GraphPlotter(os.path.join(self.save_dir, 'cv_' + str(i)), ['BCEwithlogits', 'accuracy'], 'val')
 
-            train_dataset = MaterialAtmaDataset(
+            train_dataset = AtmaDataset(
                 data_dir = self.img_path,
                 img_name_df = self.encoded_material_df.object_id[train],
                 target_df = self.encoded_material_df.drop('object_id', axis=1).loc[train],
                 trans = self.train_transforms
             )
 
-            val_dataset = MaterialAtmaDataset(
+            val_dataset = AtmaDataset(
                 data_dir = self.img_path,
                 img_name_df = self.encoded_material_df.object_id[val],
                 target_df = self.encoded_material_df.drop('object_id', axis=1).loc[val],
