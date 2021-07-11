@@ -50,7 +50,7 @@ class MaterialTrainer(Trainer):
         # Define transform
         self.train_df = pd.read_csv(train_csv_path)
         self.material_df = pd.read_csv(material_path)
-        self.encoded_material_df = one_hot_encode(self.material_df)
+        self.encoded_material_df = self.target_encoder(one_hot_encode(self.material_df))
 
         self.train_transforms = transforms.Compose([
             transforms.RandomResizedCrop(256),
@@ -66,7 +66,7 @@ class MaterialTrainer(Trainer):
         ])
 
         # Define model, loss, optim
-        self.model = ResNet(arch=args.arch, num_classes=25)
+        self.model = ResNet(arch=args.arch, num_classes=5+1)
         print(self.model)
         self.model.to(self.device)
 
@@ -98,6 +98,23 @@ class MaterialTrainer(Trainer):
                 self.model.load_state_dict(torch.load(args.resume, self.device))
 
         self.save_list = Save_Handle(max_num=args.max_model_num)
+
+    def target_encoder(self, target, num=5):
+        """class: 25 -> 5 + other class 1 -> 6"""
+        class_names = [class_name for class_name in self.material_df.name.value_counts().index]
+        use_class_names = class_names[:num]
+        use_class_names.append('other')
+
+        not_use_class_names = class_names[num:]
+
+        # other making
+        for name in not_use_class_names:
+            target.loc[target[name] == 1, 'other'] = 1
+            target = target.drop(name, axis=1)
+
+        target = target.fillna(0)
+
+        return target
 
     def train(self):
         """training process"""

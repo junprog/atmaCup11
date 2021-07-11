@@ -29,5 +29,5 @@ class Trainer(object):
         raise NotImplementedError
 
     def train(self):
-        """training one epoch"""
+        """training roop"""
         raise NotImplementedError
