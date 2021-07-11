@@ -6,12 +6,11 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedGroupKFold
 
 import torch
 import torch.nn as nn
 from torch import optim
-from torch.optim import lr_scheduler
 import torchvision
 from torchvision import transforms
 
@@ -20,13 +19,13 @@ from engine.trainer import Trainer
 from datasets.atma_dataset import AtmaDataset
 from datasets.one_hot_encode import one_hot_encode
 
-from models.resnet import ResNet
+from models.fusion_net import FusionNet
 
 from utils.helper import Save_Handle, AverageMeter
 from utils.visualizer import GraphPlotter
 from utils.metrics import calc_accuracy
 
-class TechniqueTrainer(Trainer):
+class FusionTrainer(Trainer):
     def setup(self):
         """initialize the datasets, model, loss and optimizer"""
         args = self.args
@@ -43,15 +42,13 @@ class TechniqueTrainer(Trainer):
         train_csv_path = os.path.join(self.data_dir, 'train.csv')
         #test_csv_path = os.path.join(self.data_dir, 'test.csv')
         #material_path = os.path.join(self.data_dir, 'materials.csv')
-        technique_path = os.path.join(self.data_dir, 'techniques.csv')
+        #techniques_path = os.path.join(self.data_dir, 'techniques.csv')
         self.img_path = os.path.join(self.data_dir, 'photos')
 
-        self.kf = KFold(n_splits=5)
+        self.skf = StratifiedGroupKFold(n_splits=5)
 
         # Define transform
         self.train_df = pd.read_csv(train_csv_path)
-        self.tech_df = pd.read_csv(technique_path)
-        self.encoded_tech_df = self.target_encoder(one_hot_encode(self.tech_df), num=2)
 
         self.train_transforms = transforms.Compose([
             transforms.RandomResizedCrop(256),
@@ -67,51 +64,34 @@ class TechniqueTrainer(Trainer):
         ])
 
         # Define loss
-        self.criterion = nn.BCEWithLogitsLoss()
+        self.criterion = nn.MSELoss()
         self.criterion.to(self.device)
 
         self.save_list = Save_Handle(max_num=args.max_model_num)
-
-    def target_encoder(self, target, num=2):
-        """class: 10 -> 2 + other class 1 -> 3"""
-        class_names = [class_name for class_name in self.tech_df.name.value_counts().index]
-        use_class_names = class_names[:num]
-        use_class_names.append('other')
-
-        not_use_class_names = class_names[num:]
-
-        # other making
-        for name in not_use_class_names:
-            target.loc[target[name] == 1, 'other'] = 1
-            target = target.drop(name, axis=1)
-
-        target = target.fillna(0)
-
-        return target
 
     def train(self):
         """training process"""
         args = self.args
 
-        for i, (train, val) in enumerate(self.kf.split(self.encoded_tech_df)):
+        for i, (train, val) in enumerate(self.skf.split(self.train_df['object_id'], y=self.train_df['sorting_date'], groups=self.train_df['target'])):
 
             if not os.path.exists(os.path.join(self.save_dir, 'cv_' + str(i))):
                 os.mkdir(os.path.join(self.save_dir, 'cv_' + str(i)))
 
-            self.tr_graph = GraphPlotter(os.path.join(self.save_dir, 'cv_' + str(i)), ['BCEwithlogits', 'accuracy'], 'train')
-            self.vl_graph = GraphPlotter(os.path.join(self.save_dir, 'cv_' + str(i)), ['BCEwithlogits', 'accuracy'], 'val')
+            self.tr_graph = GraphPlotter(os.path.join(self.save_dir, 'cv_' + str(i)), ['MSE'], 'train')
+            self.vl_graph = GraphPlotter(os.path.join(self.save_dir, 'cv_' + str(i)), ['MSE'], 'val')
 
             train_dataset = AtmaDataset(
                 data_dir = self.img_path,
-                img_name_df = self.encoded_tech_df.object_id[train],
-                target_df = self.encoded_tech_df.drop('object_id', axis=1).loc[train],
+                img_name_df = self.train_df.object_id[train],
+                target_df = self.train_df.drop('object_id', axis=1).drop('sorting_date', axis=1).drop('art_series_id', axis=1).loc[train],
                 trans = self.train_transforms
             )
 
             val_dataset = AtmaDataset(
                 data_dir = self.img_path,
-                img_name_df = self.encoded_tech_df.object_id[val],
-                target_df = self.encoded_tech_df.drop('object_id', axis=1).loc[val],
+                img_name_df = self.train_df.object_id[val],
+                target_df = self.train_df.drop('object_id', axis=1).drop('sorting_date', axis=1).drop('art_series_id', axis=1).loc[val],
                 trans = self.val_transforms
             )
 
@@ -119,37 +99,25 @@ class TechniqueTrainer(Trainer):
             self.val_loader = torch.utils.data.DataLoader(val_dataset, args.batch_size, shuffle=False, num_workers=0)
 
             # Define model, scheduler, optim
-            self.model = ResNet(arch=args.arch, num_classes=2+1)
+            mate_weight_path = os.path.join(args.mate_res_dir, 'cv_' + str(i), 'best_model.pth')
+            tech_weight_path = os.path.join(args.tech_res_dir, 'cv_' + str(i), 'best_model.pth')
+
+            self.model = FusionNet(
+                arch=args.arch,
+                simsiam_weight_path=args.init_weight_path,
+                mate_weight_path=mate_weight_path,
+                tech_weight_path=tech_weight_path,
+                freeze=True
+            )
             print(self.model)
             self.model.to(self.device)
 
-            lr = 0.1
+            lr = 0.01
 
-            self.optimizer = optim.SGD(
-                self.model.parameters(),
-                lr=lr,
-                momentum=0.9,
-                weight_decay=5e-4
-            )
-
-            self.scheduler = lr_scheduler.MultiStepLR(self.optimizer, milestones=[25, 50, 75, 90], gamma=0.1)
-
-            # SSL pre-train init weight (.tar)
-            if args.init_weight_path:
-                checkpoint = torch.load(args.init_weight_path, self.device)
-                new_checkpoint = OrderedDict()
-                
-                for saved_key, saved_value in checkpoint['model_state_dict'].items():
-                    if 'projector' in saved_key or 'predictor' in saved_key:
-                        continue
-                    else:
-                        saved_key = saved_key.replace('encoder.', '')
-                        new_checkpoint[saved_key] = saved_value
-
-                self.model.feature.load_state_dict(new_checkpoint)
+            self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
 
             self.start_epoch = 0
-            self.best_acc = 0
+            self.best_loss = 0
             
             if args.resume:
                 suf = args.resume.rsplit('.', 1)[-1]
@@ -166,25 +134,19 @@ class TechniqueTrainer(Trainer):
                 self.epoch = epoch
 
                 self.train_epoch(epoch, i)
-                self.scheduler.step()
 
                 if epoch % args.val_epoch == 0 and epoch >= args.val_start:
                     self.val_epoch(epoch, i)
 
     def train_epoch(self, epoch, i):
         epoch_loss = AverageMeter()
-        epoch_acc = AverageMeter()
 
         epoch_start = time.time()
         self.model.train()  # Set model to training mode
 
-        ## freeze feature until 40 epoch
-        if epoch < 40:
-            for params in self.model.feature.parameters():
-                params.requires_grad = False
-        else:
-            for params in self.model.feature.parameters():
-                params.requires_grad = True
+        ## unfreeze all params at 50 epoch
+        if epoch == 50:
+            self.model.unfreeze()
 
         for inputs, target in tqdm(self.train_loader, ncols=60):
             inputs = inputs.to(self.device)
@@ -195,16 +157,15 @@ class TechniqueTrainer(Trainer):
                 loss = self.criterion(outputs, target)
 
                 epoch_loss.update(loss.item(), inputs.size(0))
-                epoch_acc.update(calc_accuracy(target, torch.sigmoid(outputs)), inputs.size(0))
 
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
-        logging.info('Epoch {} Train, Acc: {:.5f}, Loss: {:.5f}, lr: {:.5f}, Cost {:.1f} sec'
-                     .format(self.epoch, epoch_acc.get_avg(), epoch_loss.get_avg(), self.optimizer.param_groups[0]['lr'], time.time()-epoch_start))
+        logging.info('Epoch {} Train, Loss: {:.5f}, lr: {:.5f}, Cost {:.1f} sec'
+                     .format(self.epoch, epoch_loss.get_avg(), self.optimizer.param_groups[0]['lr'], time.time()-epoch_start))
         
-        self.tr_graph(self.epoch, [epoch_loss.get_avg(), epoch_acc.get_avg()])
+        self.tr_graph(self.epoch, [epoch_loss.get_avg()])
 
         if epoch % self.args.check_point == 0:
             model_state_dic = self.model.state_dict()
@@ -220,7 +181,6 @@ class TechniqueTrainer(Trainer):
         epoch_start = time.time()
         self.model.eval()  # Set model to evaluate mode
         epoch_loss = AverageMeter()
-        epoch_acc = AverageMeter()
 
         for inputs, target in tqdm(self.val_loader, ncols=60):
             inputs = inputs.to(self.device)
@@ -231,15 +191,14 @@ class TechniqueTrainer(Trainer):
                 loss = self.criterion(outputs, target)
 
             epoch_loss.update(loss.item(), inputs.size(0))
-            epoch_acc.update(calc_accuracy(target, torch.sigmoid(outputs)), inputs.size(0))
 
-        logging.info('Epoch {} Val, Acc: {:.5f}, Loss: {:.5f}, Cost {:.1f} sec'
-                     .format(self.epoch, epoch_acc.get_avg(), epoch_loss.get_avg(), time.time()-epoch_start))
+        logging.info('Epoch {} Val, Loss: {:.5f}, Cost {:.1f} sec'
+                     .format(self.epoch, epoch_loss.get_avg(), time.time()-epoch_start))
 
-        self.vl_graph(self.epoch, [epoch_loss.get_avg(), epoch_acc.get_avg()])
+        self.vl_graph(self.epoch, [epoch_loss.get_avg()])
 
         model_state_dic = self.model.state_dict()
-        if self.best_acc < epoch_acc.get_avg():
-            self.best_acc = epoch_acc.get_avg()
-            logging.info("save max acc {:.2f} model epoch {}".format(self.best_acc, self.epoch))
+        if self.best_loss > epoch_loss.get_avg():
+            self.best_loss = epoch_loss.get_avg()
+            logging.info("save min loss {:.2f} model epoch {}".format(self.best_loss, self.epoch))
             torch.save(model_state_dic, os.path.join(self.save_dir, 'cv_' + str(i), 'best_model.pth'))
