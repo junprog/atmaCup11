@@ -1,7 +1,21 @@
 import os
 import csv
 import logging
+import random
+import torch
+
 import numpy as np
+
+def fix_seed(seed):
+    # random
+    random.seed(seed)
+    # Numpy
+    np.random.seed(seed)
+    # Pytorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    #torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = True
 
 def worker_init_fn(worker_id):                                                          
     np.random.seed(np.random.get_state()[1][0] + worker_id)

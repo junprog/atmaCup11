@@ -6,6 +6,8 @@ import torch
 
 from engine.simsiam_trainer import SimSiamTrainer
 
+from utils.helper import fix_seed
+
 args = None
 
 def parse_args():
@@ -54,6 +56,8 @@ if __name__ == '__main__':
     args = parse_args()
     torch.backends.cudnn.benchmark = True
     os.environ['CUDA_VISIBLE_DEVICES'] = args.device.strip('-')  # set vis gpu
+
+    fix_seed(765)
 
     trainer = SimSiamTrainer(args)
     trainer.setup()

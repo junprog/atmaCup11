@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
@@ -82,10 +83,10 @@ class MaterialTrainer(Trainer):
             weight_decay=5e-4
         )
 
-        self.scheduler = lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=args.max_epoch)
+        self.scheduler = lr_scheduler.MultiStepLR(self.optimizer, milestones=[50, 75, 90], gamma=0.1)
 
         self.start_epoch = 0
-        self.best_loss = np.inf
+        self.best_acc = 0
         
         if args.resume:
             suf = args.resume.rsplit('.', 1)[-1]
@@ -145,10 +146,27 @@ class MaterialTrainer(Trainer):
             self.train_loader = torch.utils.data.DataLoader(train_dataset, args.batch_size, shuffle=True, drop_last=True, num_workers=0)
             self.val_loader = torch.utils.data.DataLoader(val_dataset, args.batch_size, shuffle=False, num_workers=0)
 
+            # SSL pre-train init weight (.tar)
+            if args.init_weight_path:
+                checkpoint = torch.load(args.init_weight_path, self.device)
+                new_checkpoint = OrderedDict()
+                
+                for saved_key, saved_value in checkpoint['model_state_dict'].items():
+                    if 'projector' in saved_key or 'predictor' in saved_key:
+                        continue
+                    else:
+                        saved_key = saved_key.replace('encoder.', '')
+                        new_checkpoint[saved_key] = saved_value
+
+                self.model.feature.load_state_dict(new_checkpoint)
+
             for epoch in range(self.start_epoch, args.max_epoch):
                 logging.info('-'*5 + 'Epoch {}/{}'.format(epoch, args.max_epoch - 1) + '-'*5)
                 self.epoch = epoch
+                
                 self.train_epoch(epoch, i)
+                self.scheduler.step()
+
                 if epoch % args.val_epoch == 0 and epoch >= args.val_start:
                     self.val_epoch(epoch, i)
 
@@ -159,6 +177,14 @@ class MaterialTrainer(Trainer):
         epoch_start = time.time()
         self.model.train()  # Set model to training mode
 
+        ## freeze feature until 60 epoch
+        if epoch < 60:
+            for params in self.model.feature.parameters():
+                params.requires_grad = False
+        else:
+            for params in self.model.feature.parameters():
+                params.requires_grad = True
+
         for inputs, target in tqdm(self.train_loader, ncols=60):
             inputs = inputs.to(self.device)
             target = target.to(self.device)
@@ -168,12 +194,11 @@ class MaterialTrainer(Trainer):
                 loss = self.criterion(outputs, target)
 
                 epoch_loss.update(loss.item(), inputs.size(0))
-                epoch_acc.update(calc_accuracy(outputs, target), inputs.size(0))
+                epoch_acc.update(calc_accuracy(target, torch.sigmoid(outputs)), inputs.size(0))
 
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-                self.scheduler.step()
 
         logging.info('Epoch {} Train, Acc: {:.5f}, Loss: {:.5f}, lr: {:.5f}, Cost {:.1f} sec'
                      .format(self.epoch, epoch_acc.get_avg(), epoch_loss.get_avg(), self.optimizer.param_groups[0]['lr'], time.time()-epoch_start))
@@ -205,7 +230,7 @@ class MaterialTrainer(Trainer):
                 loss = self.criterion(outputs, target)
 
             epoch_loss.update(loss.item(), inputs.size(0))
-            epoch_acc.update(calc_accuracy(outputs, target), inputs.size(0))
+            epoch_acc.update(calc_accuracy(target, torch.sigmoid(outputs)), inputs.size(0))
 
         logging.info('Epoch {} Val, Acc: {:.5f}, Loss: {:.5f}, Cost {:.1f} sec'
                      .format(self.epoch, epoch_acc.get_avg(), epoch_loss.get_avg(), time.time()-epoch_start))
@@ -213,7 +238,7 @@ class MaterialTrainer(Trainer):
         self.vl_graph(self.epoch, [epoch_loss.get_avg(), epoch_acc.get_avg()])
 
         model_state_dic = self.model.state_dict()
-        if self.best_loss > epoch_loss.get_avg():
-            self.best_loss = epoch_loss.get_avg()
-            logging.info("save min loss {:.2f} model epoch {}".format(self.best_loss, self.epoch))
+        if self.best_acc < epoch_acc.get_avg():
+            self.best_acc = epoch_acc.get_avg()
+            logging.info("save max acc {:.2f} model epoch {}".format(self.best_acc, self.epoch))
             torch.save(model_state_dic, os.path.join(self.save_dir, 'cv_' + str(i), 'best_model.pth'))

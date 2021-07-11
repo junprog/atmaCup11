@@ -6,6 +6,8 @@ import torch
 
 from engine.material_trainer import MaterialTrainer
 
+from utils.helper import fix_seed
+
 args = None
 
 def parse_args():
@@ -19,7 +21,8 @@ def parse_args():
               
     parser.add_argument('--arch', type=str, default='resnet34',
                         help='the model architecture [resnet18, resnet34]')
-                      
+    parser.add_argument('--init-weight-path', type=str, default='',
+                        help='ssl pre-train model path')                     
                       
     parser.add_argument('--resume', default='',
                         help='the path of resume training model')
@@ -42,10 +45,7 @@ def parse_args():
                         help='the num of training process')
 
     parser.add_argument('--crop-size', type=int, default=224,
-                        help='the crop size of the train image')
-
-    parser.add_argument('--visual-num', type=int, default=4,
-                        help='the number of visualize images')                       
+                        help='the crop size of the train image')             
 
     args = parser.parse_args()
     return args
@@ -54,6 +54,8 @@ if __name__ == '__main__':
     args = parse_args()
     torch.backends.cudnn.benchmark = True
     os.environ['CUDA_VISIBLE_DEVICES'] = args.device.strip('-')  # set vis gpu
+
+    fix_seed(765)
 
     trainer = MaterialTrainer(args)
     trainer.setup()
