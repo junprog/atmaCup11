@@ -95,9 +95,6 @@ class TechniqueTrainer(Trainer):
 
         for i, (train, val) in enumerate(self.kf.split(self.encoded_tech_df)):
 
-            self.start_epoch = 0
-            self.best_acc = 0
-
             if not os.path.exists(os.path.join(self.save_dir, 'cv_' + str(i))):
                 os.mkdir(os.path.join(self.save_dir, 'cv_' + str(i)))
 
@@ -231,6 +228,10 @@ class TechniqueTrainer(Trainer):
 
             with torch.set_grad_enabled(False):
                 outputs = self.model(inputs)
+
+                if outputs.dim() == 1:
+                    outputs = outputs.unsqueeze(0)
+
                 loss = self.criterion(outputs, target)
 
             epoch_loss.update(loss.item(), inputs.size(0))
@@ -242,7 +243,7 @@ class TechniqueTrainer(Trainer):
         self.vl_graph(self.epoch, [epoch_loss.get_avg(), epoch_acc.get_avg()])
 
         model_state_dic = self.model.state_dict()
-        if self.best_acc > epoch_acc.get_avg():
+        if self.best_acc < epoch_acc.get_avg():
             self.best_acc = epoch_acc.get_avg()
             logging.info("save max acc {:.2f} model epoch {}".format(self.best_acc, self.epoch))
             torch.save(model_state_dic, os.path.join(self.save_dir, 'cv_' + str(i), 'best_model.pth'))

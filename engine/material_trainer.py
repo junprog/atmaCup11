@@ -95,9 +95,6 @@ class MaterialTrainer(Trainer):
 
         for i, (train, val) in enumerate(self.kf.split(self.encoded_material_df)):
 
-            self.start_epoch = 0
-            self.best_acc = 0
-
             if not os.path.exists(os.path.join(self.save_dir, 'cv_' + str(i))):
                 os.mkdir(os.path.join(self.save_dir, 'cv_' + str(i)))
 
