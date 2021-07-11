@@ -17,7 +17,7 @@ from torchvision import transforms
 
 from engine.trainer import Trainer
 
-from datasets.atma_dataset import MaterialAtmaDataset
+from datasets.atma_dataset import TechniqueAtmaDataset
 from datasets.one_hot_encode import one_hot_encode
 
 from models.resnet import ResNet
@@ -26,7 +26,7 @@ from utils.helper import Save_Handle, AverageMeter
 from utils.visualizer import GraphPlotter
 from utils.metrics import calc_accuracy
 
-class MaterialTrainer(Trainer):
+class TechniqueTrainer(Trainer):
     def setup(self):
         """initialize the datasets, model, loss and optimizer"""
         args = self.args
@@ -42,16 +42,16 @@ class MaterialTrainer(Trainer):
 
         train_csv_path = os.path.join(self.data_dir, 'train.csv')
         #test_csv_path = os.path.join(self.data_dir, 'test.csv')
-        material_path = os.path.join(self.data_dir, 'materials.csv')
-        #techniques_path = os.path.join(self.data_dir, 'techniques.csv')
+        #material_path = os.path.join(self.data_dir, 'materials.csv')
+        technique_path = os.path.join(self.data_dir, 'techniques.csv')
         self.img_path = os.path.join(self.data_dir, 'photos')
 
         self.kf = KFold(n_splits=5)
 
         # Define transform
         self.train_df = pd.read_csv(train_csv_path)
-        self.material_df = pd.read_csv(material_path)
-        self.encoded_material_df = self.target_encoder(one_hot_encode(self.material_df))
+        self.tech_df = pd.read_csv(technique_path)
+        self.encoded_tech_df = self.target_encoder(one_hot_encode(self.tech_df), num=2)
 
         self.train_transforms = transforms.Compose([
             transforms.RandomResizedCrop(256),
@@ -72,9 +72,9 @@ class MaterialTrainer(Trainer):
 
         self.save_list = Save_Handle(max_num=args.max_model_num)
 
-    def target_encoder(self, target, num=5):
-        """class: 25 -> 5 + other class 1 -> 6"""
-        class_names = [class_name for class_name in self.material_df.name.value_counts().index]
+    def target_encoder(self, target, num=2):
+        """class: 10 -> 2 + other class 1 -> 3"""
+        class_names = [class_name for class_name in self.tech_df.name.value_counts().index]
         use_class_names = class_names[:num]
         use_class_names.append('other')
 
@@ -93,7 +93,7 @@ class MaterialTrainer(Trainer):
         """training process"""
         args = self.args
 
-        for i, (train, val) in enumerate(self.kf.split(self.encoded_material_df)):
+        for i, (train, val) in enumerate(self.kf.split(self.encoded_tech_df)):
 
             self.start_epoch = 0
             self.best_acc = 0
@@ -104,17 +104,17 @@ class MaterialTrainer(Trainer):
             self.tr_graph = GraphPlotter(os.path.join(self.save_dir, 'cv_' + str(i)), ['BCEwithlogits', 'accuracy'], 'train')
             self.vl_graph = GraphPlotter(os.path.join(self.save_dir, 'cv_' + str(i)), ['BCEwithlogits', 'accuracy'], 'val')
 
-            train_dataset = MaterialAtmaDataset(
+            train_dataset = TechniqueAtmaDataset(
                 data_dir = self.img_path,
-                img_name_df = self.encoded_material_df.object_id[train],
-                target_df = self.encoded_material_df.drop('object_id', axis=1).loc[train],
+                img_name_df = self.encoded_tech_df.object_id[train],
+                target_df = self.encoded_tech_df.drop('object_id', axis=1).loc[train],
                 trans = self.train_transforms
             )
 
-            val_dataset = MaterialAtmaDataset(
+            val_dataset = TechniqueAtmaDataset(
                 data_dir = self.img_path,
-                img_name_df = self.encoded_material_df.object_id[val],
-                target_df = self.encoded_material_df.drop('object_id', axis=1).loc[val],
+                img_name_df = self.encoded_tech_df.object_id[val],
+                target_df = self.encoded_tech_df.drop('object_id', axis=1).loc[val],
                 trans = self.val_transforms
             )
 
@@ -122,7 +122,7 @@ class MaterialTrainer(Trainer):
             self.val_loader = torch.utils.data.DataLoader(val_dataset, args.batch_size, shuffle=False, num_workers=0)
 
             # Define model, scheduler, optim
-            self.model = ResNet(arch=args.arch, num_classes=5+1)
+            self.model = ResNet(arch=args.arch, num_classes=2+1)
             print(self.model)
             self.model.to(self.device)
 
@@ -242,7 +242,7 @@ class MaterialTrainer(Trainer):
         self.vl_graph(self.epoch, [epoch_loss.get_avg(), epoch_acc.get_avg()])
 
         model_state_dic = self.model.state_dict()
-        if self.best_acc < epoch_acc.get_avg():
+        if self.best_acc > epoch_acc.get_avg():
             self.best_acc = epoch_acc.get_avg()
             logging.info("save max acc {:.2f} model epoch {}".format(self.best_acc, self.epoch))
             torch.save(model_state_dic, os.path.join(self.save_dir, 'cv_' + str(i), 'best_model.pth'))
