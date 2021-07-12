@@ -17,3 +17,6 @@ class: 25 -> 5 にする
 
 * Techniques
 class: 10 -> 2 にする
+
+fusion_logs/exp02-0712-041745 : schedulerなし、StratifiedGroupKFold(うまく分割できてない？)
+fusion_logs/exp02-0712-063103 : schedulerあり、StratifiedKFold

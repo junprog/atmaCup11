@@ -11,7 +11,7 @@ from collections import OrderedDict
 from models.resnet import ResNet
 
 class FusionNet(nn.Module):
-    def __init__(self, arch, simsiam_weight_path, mate_weight_path, tech_weight_path, freeze=True):
+    def __init__(self, arch, simsiam_weight_path='', mate_weight_path='', tech_weight_path='', freeze=True):
         super().__init__()
 
         self.main_net = ResNet(arch, 1).feature
@@ -82,7 +82,7 @@ class FusionNet(nn.Module):
 
     def unfreeze(self):
         for params in self.parameters():
-            params.requires_grad = False
+            params.requires_grad = True
 
 if __name__ == '__main__':
     inputs = torch.rand(4, 3, 224, 224)

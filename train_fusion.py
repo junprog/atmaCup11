@@ -1,8 +1,6 @@
-
-import argparse
 import os
-import math
 import torch
+import argparse
 
 from engine.fusion_trainer import FusionTrainer
 

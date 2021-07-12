@@ -1,29 +1,22 @@
 import os
 import time
 import logging
-from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from sklearn.model_selection import StratifiedGroupKFold
+from sklearn.model_selection import StratifiedKFold
 
 import torch
 import torch.nn as nn
 from torch.optim import lr_scheduler
-import torchvision
 from torchvision import transforms
 
 from engine.trainer import Trainer
-
 from datasets.atma_dataset import AtmaDataset
-from datasets.one_hot_encode import one_hot_encode
-
 from models.fusion_net import FusionNet
-
 from utils.helper import Save_Handle, AverageMeter
 from utils.visualizer import GraphPlotter
-from utils.metrics import calc_accuracy
 
 class FusionTrainer(Trainer):
     def setup(self):
@@ -45,7 +38,7 @@ class FusionTrainer(Trainer):
         #techniques_path = os.path.join(self.data_dir, 'techniques.csv')
         self.img_path = os.path.join(self.data_dir, 'photos')
 
-        self.skf = StratifiedGroupKFold(n_splits=5)
+        self.skf = StratifiedKFold(n_splits=5)
 
         # Define transform
         self.train_df = pd.read_csv(train_csv_path)
@@ -73,7 +66,7 @@ class FusionTrainer(Trainer):
         """training process"""
         args = self.args
 
-        for i, (train, val) in enumerate(self.skf.split(self.train_df['object_id'], y=self.train_df['sorting_date'], groups=self.train_df['target'])):
+        for i, (train, val) in enumerate(self.skf.split(self.train_df['object_id'], self.train_df['target'])):
 
             if not os.path.exists(os.path.join(self.save_dir, 'cv_' + str(i))):
                 os.mkdir(os.path.join(self.save_dir, 'cv_' + str(i)))
@@ -136,6 +129,7 @@ class FusionTrainer(Trainer):
                 self.epoch = epoch
 
                 self.train_epoch(epoch, i)
+                self.scheduler.step()
 
                 if epoch % args.val_epoch == 0 and epoch >= args.val_start:
                     self.val_epoch(epoch, i)
@@ -197,7 +191,8 @@ class FusionTrainer(Trainer):
         logging.info('Epoch {} Val, Loss: {:.5f}, Cost {:.1f} sec'
                      .format(self.epoch, epoch_loss.get_avg(), time.time()-epoch_start))
 
-        self.vl_graph(self.epoch, [epoch_loss.get_avg()])
+        if epoch != 0:
+            self.vl_graph(self.epoch, [epoch_loss.get_avg()])
 
         model_state_dic = self.model.state_dict()
         if self.best_loss > epoch_loss.get_avg():
