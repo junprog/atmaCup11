@@ -1,29 +1,22 @@
 import os
 import time
 import logging
-from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from sklearn.model_selection import StratifiedGroupKFold
+from sklearn.model_selection import StratifiedKFold
 
 import torch
 import torch.nn as nn
 from torch.optim import lr_scheduler
-import torchvision
 from torchvision import transforms
 
 from engine.trainer import Trainer
-
 from datasets.atma_dataset import AtmaDataset
-from datasets.one_hot_encode import one_hot_encode
-
-from models.fusion_net import FusionNet
-
+from models.fusion_net import FcFusionNet_v1, FcFusionNet_v2 
 from utils.helper import Save_Handle, AverageMeter
 from utils.visualizer import GraphPlotter
-from utils.metrics import calc_accuracy
 
 class FusionTrainer(Trainer):
     def setup(self):
@@ -45,7 +38,7 @@ class FusionTrainer(Trainer):
         #techniques_path = os.path.join(self.data_dir, 'techniques.csv')
         self.img_path = os.path.join(self.data_dir, 'photos')
 
-        self.skf = StratifiedGroupKFold(n_splits=5)
+        self.skf = StratifiedKFold(n_splits=5)
 
         # Define transform
         self.train_df = pd.read_csv(train_csv_path)
@@ -73,7 +66,7 @@ class FusionTrainer(Trainer):
         """training process"""
         args = self.args
 
-        for i, (train, val) in enumerate(self.skf.split(self.train_df['object_id'], y=self.train_df['sorting_date'], groups=self.train_df['target'])):
+        for i, (train, val) in enumerate(self.skf.split(self.train_df['object_id'], self.train_df['target'])):
 
             if not os.path.exists(os.path.join(self.save_dir, 'cv_' + str(i))):
                 os.mkdir(os.path.join(self.save_dir, 'cv_' + str(i)))
@@ -95,15 +88,17 @@ class FusionTrainer(Trainer):
                 trans = self.val_transforms
             )
 
-            self.train_loader = torch.utils.data.DataLoader(train_dataset, args.batch_size, shuffle=True, drop_last=True, num_workers=0)
-            self.val_loader = torch.utils.data.DataLoader(val_dataset, args.batch_size, shuffle=False, num_workers=0)
+            self.train_loader = torch.utils.data.DataLoader(train_dataset, args.batch_size, shuffle=True, drop_last=True, num_workers=args.num_workers)
+            self.val_loader = torch.utils.data.DataLoader(val_dataset, args.batch_size, shuffle=False, num_workers=args.num_workers)
 
             # Define model, scheduler, optim
             mate_weight_path = os.path.join(args.mate_res_dir, 'cv_' + str(i), 'best_model.pth')
             tech_weight_path = os.path.join(args.tech_res_dir, 'cv_' + str(i), 'best_model.pth')
 
-            self.model = FusionNet(
+            self.model = FcFusionNet_v2(
                 arch=args.arch,
+                mate_out_num=6,
+                tech_out_num=3,
                 simsiam_weight_path=args.init_weight_path,
                 mate_weight_path=mate_weight_path,
                 tech_weight_path=tech_weight_path,
@@ -116,7 +111,8 @@ class FusionTrainer(Trainer):
 
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
 
-            self.scheduler = lr_scheduler.MultiStepLR(self.optimizer, milestones=[25, 50, 75, 90], gamma=0.1)
+            #self.scheduler = lr_scheduler.MultiStepLR(self.optimizer, milestones=[25, 50, 75, 90], gamma=0.1)
+            self.scheduler = lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=args.max_epoch)
 
             self.start_epoch = 0
             self.best_loss = np.Inf
@@ -136,6 +132,7 @@ class FusionTrainer(Trainer):
                 self.epoch = epoch
 
                 self.train_epoch(epoch, i)
+                self.scheduler.step()
 
                 if epoch % args.val_epoch == 0 and epoch >= args.val_start:
                     self.val_epoch(epoch, i)
@@ -146,9 +143,9 @@ class FusionTrainer(Trainer):
         epoch_start = time.time()
         self.model.train()  # Set model to training mode
 
-        ## unfreeze all params at 50 epoch
-        if epoch == 50:
-            self.model.unfreeze()
+        ## unfreeze all params at 51 epoch
+        if epoch == 51:
+           self.model.unfreeze()
 
         for inputs, target in tqdm(self.train_loader, ncols=60):
             inputs = inputs.to(self.device)

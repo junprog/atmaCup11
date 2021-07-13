@@ -1,6 +1,5 @@
-import torch
 import torch.nn as nn
-from torch.nn.modules.linear import Linear
+
 import  torchvision.models as models
 
 class ResNet(nn.Module):

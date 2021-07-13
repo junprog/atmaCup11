@@ -16,7 +16,7 @@ def parse_args():
                         help='exp results file name')
     parser.add_argument('--data-dir', default='',
                         help='training data directory')
-    parser.add_argument('--save-dir', default='technique_logs',
+    parser.add_argument('--save-dir', default='logs_technique',
                         help='directory to save models.')
               
     parser.add_argument('--arch', type=str, default='resnet34',
@@ -44,7 +44,7 @@ def parse_args():
     parser.add_argument('--num-workers', type=int, default=8,
                         help='the num of training process')
 
-    parser.add_argument('--crop-size', type=int, default=224,
+    parser.add_argument('--crop-size', type=int, default=256,
                         help='the crop size of the train image')             
 
     args = parser.parse_args()

@@ -1,8 +1,6 @@
-
-import argparse
 import os
-import math
 import torch
+import argparse
 
 from engine.fusion_trainer import FusionTrainer
 
@@ -12,11 +10,11 @@ args = None
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train SimSiam')
-    parser.add_argument('--exp_name', default='exp02',
+    parser.add_argument('--exp-name', default='exp03',
                         help='exp results file name')
     parser.add_argument('--data-dir', default='',
                         help='training data directory')
-    parser.add_argument('--save-dir', default='fusion_logs',
+    parser.add_argument('--save-dir', default='logs_fusion',
                         help='directory to save models.')
               
     parser.add_argument('--arch', type=str, default='resnet34',
@@ -37,7 +35,7 @@ def parse_args():
 
     parser.add_argument('--max-epoch', type=int, default=101,
                         help='max training epoch')
-    parser.add_argument('--val-epoch', type=int, default=10,
+    parser.add_argument('--val-epoch', type=int, default=5,
                         help='the num of steps to log training information')
     parser.add_argument('--val-start', type=int, default=0,
                         help='the epoch start to val')
@@ -48,7 +46,7 @@ def parse_args():
     parser.add_argument('--num-workers', type=int, default=8,
                         help='the num of training process')
 
-    parser.add_argument('--crop-size', type=int, default=224,
+    parser.add_argument('--crop-size', type=int, default=256,
                         help='the crop size of the train image')             
 
     args = parser.parse_args()

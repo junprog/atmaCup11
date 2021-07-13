@@ -41,6 +41,8 @@ class SimSiamTrainer(Trainer):
         else:
             raise Exception("gpu is not available")
 
+        self.img_path = os.path.join(self.data_dir, 'photos')
+
         # define the augmentations for self-supervised learning
         collate_fn = lightly.data.ImageCollateFunction(
             input_size=args.crop_size,
@@ -62,7 +64,7 @@ class SimSiamTrainer(Trainer):
         # create a lightly dataset for training, since the augmentations are handled
         # by the collate function, there is no need to apply additional ones here
         dataset_train_simsiam = lightly.data.LightlyDataset(
-            input_dir=self.data_dir
+            input_dir=self.img_path
         )
 
         # create a dataloader for training
@@ -89,7 +91,7 @@ class SimSiamTrainer(Trainer):
 
         # create a lightly dataset for embedding
         val_dataset = lightly.data.LightlyDataset(
-            input_dir=self.data_dir,
+            input_dir=self.img_path,
             transform=val_transforms
         )
 
@@ -212,7 +214,7 @@ class SimSiamTrainer(Trainer):
                      .format(self.epoch, epoch_loss.get_avg(), time.time()-epoch_start))
 
         if epoch % 10 == 0:
-            get_scatter_plot_with_thumbnails(epoch, embeddings_2d, self.data_dir, self.save_dir, filenames)
+            get_scatter_plot_with_thumbnails(epoch, embeddings_2d, self.img_path, self.save_dir, filenames)
 
         model_state_dic = self.model.state_dict()
         if self.best_loss > epoch_loss.get_avg():

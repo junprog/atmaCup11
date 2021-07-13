@@ -13,7 +13,6 @@ import torchvision.transforms as transforms
 import torchvision.models as models
 
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import CSVLogger
 pl.seed_everything(765)
 
 DATA_DIR = 'C:/Users/Junya/Desktop/dataset_atmaCup11'
