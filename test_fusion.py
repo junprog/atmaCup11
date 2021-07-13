@@ -11,7 +11,7 @@ from PIL import Image
 import torch
 from torchvision import transforms
 
-from models.fusion_net import FusionNet
+from models.fusion_net import FcFusionNet_v1, FcFusionNet_v2
 from utils.helper import fix_seed
 
 args = None
@@ -22,7 +22,7 @@ def parse_args():
                         help='exp results file name')
     parser.add_argument('--data-dir', default='',
                         help='training data directory')
-    parser.add_argument('--save-dir', default='test_logs',
+    parser.add_argument('--save-dir', default='logs_test',
                         help='directory to save models.')
               
     parser.add_argument('--arch', type=str, default='resnet34',
@@ -31,7 +31,7 @@ def parse_args():
                         help='fusion train dir')
 
     parser.add_argument('--device', default='0', help='assign device')
-    parser.add_argument('--crop-size', type=int, default=224,
+    parser.add_argument('--crop-size', type=int, default=256,
                         help='the crop size of the train image')             
 
     args = parser.parse_args()
@@ -72,6 +72,8 @@ if __name__ == '__main__':
     model_path_list = os.listdir(args.fusion_res_dir)
     model_path_list.remove('args.json')
     model_path_list.remove('train.log')
+    model_path_list.remove('memo.txt')
+    print(model_path_list)
 
     submission = pd.DataFrame()
     res = np.zeros((len(test_df)), dtype=np.float32)
@@ -79,19 +81,20 @@ if __name__ == '__main__':
         cv_res = []
 
         checkpoit = torch.load(os.path.join(args.fusion_res_dir, model_path, 'best_model.pth'))
-        model = FusionNet(arch=args.arch)
+        model = FcFusionNet_v2(arch=args.arch, mate_out_num=6, tech_out_num=3)
         model.load_state_dict(checkpoit)
-        model.eval().cuda()
+        model.to(device)
 
-        for i, test in enumerate(tqdm(test_df['object_id'])):
+        model.eval()
+        for i, test in enumerate(tqdm(test_df['object_id'], ncols=60)):
             img_path = os.path.join(data_dir, 'photos', test + '.jpg')
             img = Image.open(img_path)
             img = test_transforms(img)
             img.unsqueeze_(0)
 
-            img = img.cuda()
-
-            output = model(img)
+            img = img.to(device)
+            with torch.no_grad():
+                output = model(img)
 
             out = output.item()
             cv_res.append(out)
@@ -99,4 +102,4 @@ if __name__ == '__main__':
         res += np.array(cv_res)
 
     submission['target'] = list(np.squeeze(res / len(model_path_list)))
-    submission['target'].to_csv('submission_{}.csv'.format(args.exp_name), index=False)
+    submission['target'].to_csv(os.path.join(save_dir, 'submission_{}.csv'.format(args.exp_name)), index=False)

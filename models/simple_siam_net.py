@@ -1,5 +1,8 @@
 import torch.nn as nn
-import torchvision.models as models
+
+from models.efficient_net import EfficientNet
+from models.resnet import ResNet
+
 
 class projection_MLP(nn.Module):
     def __init__(self, in_dim=512, hidden_dim=512, out_dim=512):
@@ -41,11 +44,19 @@ class prediction_MLP(nn.Module):
 class SiamNet(nn.Module):
     def __init__(self, arch):
         super().__init__()
-        m = models.__dict__[arch](pretrained=False)
+        if 'resnet' in arch:
+            m = ResNet(arch, 1)
+        elif 'efficientnet' in arch:
+            m = EfficientNet(arch, 1)
+
         self.encoder = nn.Sequential(*list(m.children())[:-1])
 
-        self.projector = projection_MLP(in_dim=512, hidden_dim=512, out_dim=512)
-        self.predictor = prediction_MLP(in_dim=512, hidden_dim=256, out_dim=512)
+        if 'resnet' in arch:
+            self.projector = projection_MLP(in_dim=512, hidden_dim=512, out_dim=512)
+            self.predictor = prediction_MLP(in_dim=512, hidden_dim=256, out_dim=512)
+        elif 'efficientnet' in arch:
+            self.projector = projection_MLP(in_dim=1280, hidden_dim=512, out_dim=512)
+            self.predictor = prediction_MLP(in_dim=512, hidden_dim=256, out_dim=512)
 
     def forward(self, input1, input2, test=False):
         if test:
