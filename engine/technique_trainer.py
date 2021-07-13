@@ -52,6 +52,13 @@ class TechniqueTrainer(Trainer):
         self.train_df = pd.read_csv(train_csv_path)
         self.tech_df = pd.read_csv(technique_path)
         self.encoded_tech_df = self.target_encoder(one_hot_encode(self.tech_df), num=2)
+        
+        # train, techniques を紐付ける
+        self.unit_tech_df = self.train_df.merge(self.encoded_tech_df, on='object_id', how='left')
+        self.unit_tech_df.loc[self.unit_tech_df.pen.isnull(), 'other'] = 1
+        self.unit_tech_df.fillna(0)
+        print(len(self.unit_tech_df))
+        print(self.unit_tech_df)
 
         self.train_transforms = transforms.Compose([
             transforms.RandomResizedCrop(256),
@@ -103,15 +110,15 @@ class TechniqueTrainer(Trainer):
 
             train_dataset = AtmaDataset(
                 data_dir = self.img_path,
-                img_name_df = self.encoded_tech_df.object_id[train],
-                target_df = self.encoded_tech_df.drop('object_id', axis=1).loc[train],
+                img_name_df = self.unit_tech_df.object_id[train],
+                target_df = self.unit_tech_df.drop('object_id', axis=1).loc[train],
                 trans = self.train_transforms
             )
 
             val_dataset = AtmaDataset(
                 data_dir = self.img_path,
-                img_name_df = self.encoded_tech_df.object_id[val],
-                target_df = self.encoded_tech_df.drop('object_id', axis=1).loc[val],
+                img_name_df = self.unit_tech_df.object_id[val],
+                target_df = self.unit_tech_df.drop('object_id', axis=1).loc[val],
                 trans = self.val_transforms
             )
 
@@ -178,8 +185,8 @@ class TechniqueTrainer(Trainer):
         epoch_start = time.time()
         self.model.train()  # Set model to training mode
 
-        ## freeze feature until 40 epoch
-        if epoch < 40:
+        ## freeze feature until 20 epoch
+        if epoch < 20:
             for params in self.model.feature.parameters():
                 params.requires_grad = False
         else:
