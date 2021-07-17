@@ -2,6 +2,7 @@ import torch.nn as nn
 
 from models.efficient_net import EfficientNet
 from models.resnet import ResNet
+from models.vision_transformer import ViT
 
 
 class projection_MLP(nn.Module):
@@ -48,6 +49,8 @@ class SiamNet(nn.Module):
             m = ResNet(arch, 1)
         elif 'efficientnet' in arch:
             m = EfficientNet(arch, 1)
+        elif 'vit' in arch:
+            m = ViT(num_classes=1)
 
         self.encoder = nn.Sequential(*list(m.children())[:-1])
 
@@ -56,6 +59,9 @@ class SiamNet(nn.Module):
             self.predictor = prediction_MLP(in_dim=512, hidden_dim=256, out_dim=512)
         elif 'efficientnet' in arch:
             self.projector = projection_MLP(in_dim=1280, hidden_dim=512, out_dim=512)
+            self.predictor = prediction_MLP(in_dim=512, hidden_dim=256, out_dim=512)
+        elif 'vit' in arch:
+            self.projector = projection_MLP(in_dim=384, hidden_dim=512, out_dim=512)
             self.predictor = prediction_MLP(in_dim=512, hidden_dim=256, out_dim=512)
 
     def forward(self, input1, input2, test=False):
