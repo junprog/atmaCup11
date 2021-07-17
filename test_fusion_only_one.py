@@ -69,16 +69,16 @@ if __name__ == '__main__':
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    model_path_list = os.listdir(args.fusion_res_dir)
-    model_path_list.remove('args.json')
-    model_path_list.remove('train.log')
-    model_path_list.remove('memo.txt')
-    print(model_path_list)
+    # model_path_list = os.listdir(args.fusion_res_dir)
+    # model_path_list.remove('args.json')
+    # model_path_list.remove('train.log')
+    # model_path_list.remove('memo.txt')
+    # print(model_path_list)
 
     submission = pd.DataFrame()
     res = np.zeros((len(test_df)), dtype=np.float32)
 
-    model_path_list = ['logs_fusion/exp03-0713-194518/cv_0']
+    model_path_list = ['fusion_logs/exp03-0713-194518/cv_0']
 
     for model_path in model_path_list:
         cv_res = []
