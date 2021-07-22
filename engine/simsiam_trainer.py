@@ -43,6 +43,9 @@ class SimSiamTrainer(Trainer):
 
         self.img_path = os.path.join(self.data_dir, 'photos')
 
+        if 'vit' in args.arch:
+            self.crop_size = 224
+
         # define the augmentations for self-supervised learning
         collate_fn = lightly.data.ImageCollateFunction(
             input_size=args.crop_size,

@@ -20,12 +20,12 @@ def parse_args():
                         help='directory to save models.')
               
     parser.add_argument('--arch', type=str, default='resnet34',
-                        help='the model architecture [resnet18, resnet34]')
+                        help='the model architecture [resnet18, resnet34, efficientnet_b0, vit_small_patch16_224, nfnet_fo]')
                       
                       
     parser.add_argument('--resume', default='',
                         help='the path of resume training model')
-    parser.add_argument('--max-model-num', type=int, default=30,
+    parser.add_argument('--max-model-num', type=int, default=3,
                         help='max models num to save ')
     parser.add_argument('--check_point', type=int, default=50,
                         help='milestone of save model checkpoint')

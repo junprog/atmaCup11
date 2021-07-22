@@ -12,7 +12,9 @@ import torch
 from torchvision import transforms
 
 from models.resnet import MultiBranchResNet, MultiBranchResNet_v2
-from models.efficient_net import MultiBranchEfficientNet, MultiBranchEfficientNet_v2
+from models.efficient_net import MultiBranchEfficientNet, MultiBranchEfficientNet_v2, MultiBranchEfficientNet_cls
+from models.nf_net import MultiBranchNFNet
+from models.fusion_net import DoubleNet, TripleNet
 from utils.helper import fix_seed
 
 args = None
@@ -70,6 +72,12 @@ if __name__ == '__main__':
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
+    vit_transforms = transforms.Compose([
+        transforms.Resize((256, 256)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
     model_path_list = os.listdir(args.res_dir)
     model_path_list.remove('args.json')
     model_path_list.remove('train.log')
@@ -82,11 +90,17 @@ if __name__ == '__main__':
         cv_res = []
 
         if 'resnet' in args.arch:
-            #model = MultiBranchResNet(arch=args.arch, num_classes=1, mate_classes=6, tech_classes=3)
-            model = MultiBranchResNet_v2(arch=args.arch, num_classes=4, mate_classes=6, tech_classes=3)
+            model = MultiBranchResNet(arch=args.arch, num_classes=1, mate_classes=6, tech_classes=3)
+            #model = MultiBranchResNet_v2(arch=args.arch, num_classes=4, mate_classes=6, tech_classes=3)
         elif 'efficientnet' in args.arch:
-            model = MultiBranchEfficientNet(arch=args.arch, num_classes=1, mate_classes=6, tech_classes=3)
+            #model = MultiBranchEfficientNet(arch=args.arch, num_classes=1, mate_classes=6, tech_classes=3)
+            model = MultiBranchEfficientNet_cls(arch=args.arch, num_classes=4, mate_classes=5 + 1, tech_classes=2 + 1)
             #model = MultiBranchEfficientNet_v2(arch=args.arch, num_classes=4, mate_classes=6, tech_classes=3)
+        elif 'nfnet' in args.arch:
+            model = MultiBranchNFNet(arch=args.arch, num_classes=1, mate_classes=5 + 1, tech_classes=2 + 1)
+        elif 'fusion' in args.arch:
+            #model = DoubleNet()
+            model = TripleNet()
 
         checkpoit = torch.load(os.path.join(args.res_dir, model_path, 'best_model.pth'))
         model.load_state_dict(checkpoit)
@@ -96,15 +110,19 @@ if __name__ == '__main__':
         for i, test in enumerate(tqdm(test_df['object_id'], ncols=60)):
             img_path = os.path.join(data_dir, 'photos', test + '.jpg')
             img = Image.open(img_path)
+            img_256 = vit_transforms(img)
             img = test_transforms(img)
             img.unsqueeze_(0)
+            img_256.unsqueeze_(0)
 
             img = img.to(device)
+            img_256 = img_256.to(device)
             with torch.no_grad():
-                output = model(img)
+                output = model(img, img_256)
             output, _, _ = output
             #output, _, _, _, _ = output
             out = output.item()
+            #out = round(out)
             cv_res.append(out)
 
         res += np.array(cv_res)

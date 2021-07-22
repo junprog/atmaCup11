@@ -10,6 +10,8 @@ from collections import OrderedDict
 
 from models.resnet import ResNet
 from models.efficient_net import EfficientNet
+#from models.vision_transformer import ViT
+from vit_pytorch import ViT
 
 class FcFusionNet_v1(nn.Module):
     def __init__(self, arch, simsiam_weight_path='', mate_weight_path='', tech_weight_path='', freeze=True):
@@ -348,24 +350,229 @@ class Conv2dFusionNet(nn.Module):
         for params in self.parameters():
             params.requires_grad = True
 
+class TripleNet(nn.Module):
+    def __init__(self, mate_classes=6, tech_classes=3, resnet_weight_path='', efnet_weight_path='', vit_weight_path='', freeze=True):
+        super().__init__()
+
+        self.resnet = ResNet('resnet34', 1).feature
+        self.efnet = EfficientNet('efficientnet_b0', 1).feature
+        self.vit = ViT(image_size=256, patch_size=16, num_classes=128, dim=512, depth=6, heads=16, mlp_dim=512, dropout=0.1, emb_dropout=0.1)
+
+        self._init_weight(self.resnet, resnet_weight_path)
+        self._init_weight(self.efnet, efnet_weight_path)
+        self._init_weight(self.vit, vit_weight_path)
+
+        if freeze:
+            self._freeze(self.resnet)
+            self._freeze(self.efnet)
+            self._freeze(self.vit)
+
+        self.fc = nn.Linear(512 + 1280 + 128, 1024)
+        self.relu = nn.ReLU(inplace=True)
+        self.dropout = nn.Dropout(p=0.5)
+
+        self.reg1 = nn.Linear(1024, 512)
+        self.reg2 = nn.Linear(512, 1)
+
+        self.mate1 = nn.Linear(1024, 512)
+        self.mate2 = nn.Linear(512, mate_classes)
+
+        self.tech1 = nn.Linear(1024, 512)
+        self.tech2 = nn.Linear(512, tech_classes)
+        
+    def forward(self, x, x_256):
+        res_x, ef_x, vit_x = self.resnet(x), self.efnet(x), self.vit(x_256)
+        res_x, ef_x, vit_x = res_x.squeeze(), ef_x.squeeze(), vit_x.squeeze()
+
+        if res_x.dim() == 1:
+            res_x = res_x.unsqueeze(0)
+        if ef_x.dim() == 1:
+            ef_x = ef_x.unsqueeze(0)
+        if vit_x.dim() == 1:
+            vit_x = vit_x.unsqueeze(0)
+
+        fusion_x = torch.cat([res_x, ef_x, vit_x], dim=1)
+
+        x = self.fc(fusion_x)
+        x = self.relu(x)
+
+        reg = self.reg1(x)
+        reg = self.relu(reg)
+        reg = self.dropout(reg)
+        reg = self.reg2(reg)
+
+        mate = self.mate1(x)
+        mate = self.relu(mate)
+        mate = self.dropout(mate)
+        mate = self.mate2(mate)
+
+        tech = self.tech1(x)
+        tech = self.relu(tech)
+        tech = self.dropout(tech)
+        tech = self.tech2(tech)
+
+        return reg, mate, tech
+
+    def _init_weight(self, model, weight_path):
+        if weight_path:
+            suf = weight_path.rsplit('.', 1)[-1]
+            if suf == 'tar':
+                checkpoint = torch.load(weight_path)
+                new_checkpoint = OrderedDict()
+                
+                for saved_key, saved_value in checkpoint['state_dict'].items():
+                    if 'projector' in saved_key or 'predictor' in saved_key or 'encoder_k' in saved_key:
+                        continue
+                    else:
+                        saved_key = saved_key.replace('vit.', '')
+                        saved_key = saved_key.replace('encoder_q.', '')
+
+                    new_checkpoint[saved_key] = saved_value
+
+                model.load_state_dict(new_checkpoint)
+
+            elif suf == 'pth':
+                checkpoint = torch.load(weight_path)
+                new_checkpoint = OrderedDict()
+                
+                for saved_key, saved_value in checkpoint.items():
+                    if 'projector' in saved_key or 'predictor' in saved_key or 'fc' in saved_key:
+                        continue
+                    else:
+                        if 'reg' in saved_key or 'mate' in saved_key or 'tech' in saved_key:
+                            continue
+                        saved_key = saved_key.replace('encoder.', '')
+                        saved_key = saved_key.replace('feature.', '')
+                        new_checkpoint[saved_key] = saved_value
+
+                model.load_state_dict(new_checkpoint)
+
+    def _freeze(self, model):
+        for params in model.parameters():
+            params.requires_grad = False
+
+    def unfreeze(self):
+        for params in self.parameters():
+            params.requires_grad = True
+
+class DoubleNet(nn.Module):
+    def __init__(self, mate_classes=6, tech_classes=3, resnet_weight_path='', efnet_weight_path='', freeze=True):
+        super().__init__()
+
+        self.resnet = ResNet('resnet34', 1).feature
+        self.efnet = EfficientNet('efficientnet_b0', 1).feature
+
+        self._init_weight(self.resnet, resnet_weight_path)
+        self._init_weight(self.efnet, efnet_weight_path)
+
+        if freeze:
+            self._freeze(self.resnet)
+            self._freeze(self.efnet)
+
+        self.fc = nn.Linear(512 + 1280, 1024)
+        self.relu = nn.ReLU(inplace=True)
+        self.dropout = nn.Dropout(p=0.5)
+
+        self.reg1 = nn.Linear(1024, 512)
+        self.reg2 = nn.Linear(512, 1)
+
+        self.mate1 = nn.Linear(1024, 512)
+        self.mate2 = nn.Linear(512, mate_classes)
+
+        self.tech1 = nn.Linear(1024, 512)
+        self.tech2 = nn.Linear(512, tech_classes)
+        
+    def forward(self, x):
+        res_x, ef_x = self.resnet(x), self.efnet(x)
+        res_x, ef_x = res_x.squeeze(), ef_x.squeeze()
+
+        if res_x.dim() == 1:
+            res_x = res_x.unsqueeze(0)
+        if ef_x.dim() == 1:
+            ef_x = ef_x.unsqueeze(0)
+
+        fusion_x = torch.cat([res_x, ef_x], dim=1)
+
+        x = self.fc(fusion_x)
+        x = self.relu(x)
+
+        reg = self.reg1(x)
+        reg = self.relu(reg)
+        reg = self.dropout(reg)
+        reg = self.reg2(reg)
+
+        mate = self.mate1(x)
+        mate = self.relu(mate)
+        mate = self.dropout(mate)
+        mate = self.mate2(mate)
+
+        tech = self.tech1(x)
+        tech = self.relu(tech)
+        tech = self.dropout(tech)
+        tech = self.tech2(tech)
+
+        return reg, mate, tech
+
+    def _init_weight(self, model, weight_path):
+        if weight_path:
+            suf = weight_path.rsplit('.', 1)[-1]
+            if suf == 'tar':
+                checkpoint = torch.load(weight_path)
+                new_checkpoint = OrderedDict()
+                
+                for saved_key, saved_value in checkpoint['model_state_dict'].items():
+                    if 'projector' in saved_key or 'predictor' in saved_key or 'fc' in saved_key:
+                        continue
+                    else:
+                        saved_key = saved_key.replace('encoder.', '')
+                        saved_key = saved_key.replace('feature.', '')
+                        new_checkpoint[saved_key] = saved_value
+
+                model.load_state_dict(new_checkpoint)
+
+            elif suf == 'pth':
+                checkpoint = torch.load(weight_path)
+                new_checkpoint = OrderedDict()
+                
+                for saved_key, saved_value in checkpoint.items():
+                    if 'projector' in saved_key or 'predictor' in saved_key or 'fc' in saved_key:
+                        continue
+                    else:
+                        if 'reg' in saved_key or 'mate' in saved_key or 'tech' in saved_key:
+                            continue
+                        saved_key = saved_key.replace('encoder.', '')
+                        saved_key = saved_key.replace('feature.', '')
+                        new_checkpoint[saved_key] = saved_value
+
+                model.load_state_dict(new_checkpoint)
+
+    def _freeze(self, model):
+        for params in model.parameters():
+            params.requires_grad = False
+
+    def unfreeze(self):
+        for params in self.parameters():
+            params.requires_grad = True
 
 if __name__ == '__main__':
     inputs = torch.rand(4, 3, 224, 224)
 
-    model = FcFusionNet_v1(
-        arch='efficientnet_b0',
-        #mate_out_num=6,
-        #tech_out_num=3,
-        #simsiam_weight_path='logs_simsiam/exp02-0710-182433/300_ckpt.tar',
-        #mate_weight_path='logs_material/exp02-0712-000307/cv_0/best_model.pth',
-        #tech_weight_path='logs_technique/exp02-0712-025133/cv_0/best_model.pth',
-        freeze=True
-    )
-    
+    # model = FcFusionNet_v1(
+    #     arch='efficientnet_b0',
+    #     #mate_out_num=6,
+    #     #tech_out_num=3,
+    #     #simsiam_weight_path='logs_simsiam/exp02-0710-182433/300_ckpt.tar',
+    #     #mate_weight_path='logs_material/exp02-0712-000307/cv_0/best_model.pth',
+    #     #tech_weight_path='logs_technique/exp02-0712-025133/cv_0/best_model.pth',
+    #     freeze=True
+    # )
+
+    model = DoubleNet()
+
     print(model)
 
-    outputs = model(inputs)
+    reg, mate, tech = model(inputs)
 
-    print(outputs.shape)
+    print(reg.shape, mate.shape, tech.shape)
 
     model.unfreeze()
