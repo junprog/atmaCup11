@@ -36,7 +36,6 @@ class GraphPlotter:
             self.value_dict[metric].append(values[i])
             ax.plot(self.epochs, self.value_dict[metric], label=metric)
         
-        plt.ylim(-1.0, 2.5)
         ax.legend(loc=0)
         fig.tight_layout()  # レイアウトの設定
         fig.savefig(os.path.join(self.save_dir, self.graph_name))

@@ -2,9 +2,10 @@ import torch.nn as nn
 
 from models.efficient_net import EfficientNet
 from models.resnet import ResNet
-#from models.vision_transformer import ViT
-from vit_pytorch import ViT
-from models.nf_net import NFNet
+
+# from models.vision_transformer import ViT
+# from vit_pytorch import ViT
+# from models.nf_net import NFNet
 
 class projection_MLP(nn.Module):
     def __init__(self, in_dim=512, hidden_dim=512, out_dim=512):
@@ -53,12 +54,13 @@ class SiamNet(nn.Module):
         elif 'efficientnet' in arch:
             m = EfficientNet(arch, 1)
             self.encoder = nn.Sequential(*list(m.children())[:-1])
-        elif 'vit' in arch:
-            self.vit = True
-            self.encoder = ViT(image_size=256, patch_size=16, num_classes=128, dim=512, depth=6, heads=16, mlp_dim=512, dropout=0.1, emb_dropout=0.1)
-        elif 'nfnet' in arch:
-            m = NFNet(num_classes=1)
-            self.encoder = nn.Sequential(*list(m.children())[:-1])
+
+        # elif 'vit' in arch:
+        #     self.vit = True
+        #     self.encoder = ViT(image_size=256, patch_size=16, num_classes=128, dim=512, depth=6, heads=16, mlp_dim=512, dropout=0.1, emb_dropout=0.1)
+        # elif 'nfnet' in arch:
+        #     m = NFNet(num_classes=1)
+        #     self.encoder = nn.Sequential(*list(m.children())[:-1])
 
         if 'resnet' in arch:
             self.projector = projection_MLP(in_dim=512, hidden_dim=512, out_dim=512)
@@ -66,12 +68,13 @@ class SiamNet(nn.Module):
         elif 'efficientnet' in arch:
             self.projector = projection_MLP(in_dim=1280, hidden_dim=512, out_dim=512)
             self.predictor = prediction_MLP(in_dim=512, hidden_dim=256, out_dim=512)
-        elif 'vit' in arch:
-            self.projector = projection_MLP(in_dim=384, hidden_dim=256, out_dim=256)
-            self.predictor = prediction_MLP(in_dim=256, hidden_dim=128, out_dim=256)
-        elif 'nfnet' in arch:
-            self.projector = projection_MLP(in_dim=3072, hidden_dim=512, out_dim=512)
-            self.predictor = prediction_MLP(in_dim=512, hidden_dim=256, out_dim=512)
+
+        # elif 'vit' in arch:
+        #     self.projector = projection_MLP(in_dim=384, hidden_dim=256, out_dim=256)
+        #     self.predictor = prediction_MLP(in_dim=256, hidden_dim=128, out_dim=256)
+        # elif 'nfnet' in arch:
+        #     self.projector = projection_MLP(in_dim=3072, hidden_dim=512, out_dim=512)
+        #     self.predictor = prediction_MLP(in_dim=512, hidden_dim=256, out_dim=512)
 
     def forward(self, input1, input2, test=False):
         if test:
