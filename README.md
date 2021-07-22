@@ -1,4 +1,50 @@
-# atmaCup#11 16位 解法
+# 16位 解法 (atmaCup#11)
+
+public: 0.6791, private: 0.6686
+
+## Models
+* fusion (ResNet34 + EfficinetNet_b0)
+    * ResNet34 (simsiam -> multitask)
+    * EfficinetNet_b0 (simsiam -> multitask)
+
+## Loss
+* multi task loss = MSE + material_BCEWithLogits + technique_BCEWithLogits
+    * MSE(output1, target)
+    * material_BCEWithLogits(output2, materials_class)
+    * technique_BCEWithLogits(output2, techniques_class)
+
+* materils_class
+    * 25種類　-> 最頻クラス上位5クラスピックアップ + 残り20クラスをotherクラス = 6クラスマルチラベル分類
+    * materialsが存在しない画像はotherクラスとする
+
+* techniques_class
+    * 10種類　-> 最頻クラス上位2クラスピックアップ + 残り20クラスをotherクラス = 3クラスマルチラベル分類
+    * techniquesが存在しない画像はotherクラスとする
+
+## Optimizer
+* Adam(lr = 0.01)
+
+## Settings
+* StratifiedKFold(k=5)
+* Epoch: 400
+* Augmentation:
+    * RandomResizedCrop(256),
+    * RandomHorizontalFlip(p=0.5),
+
+* Fusionモデルにおいてはfeatures部分をfreeze
+* 推論時はinput sizeを352
+
+## Demo
+
+### Environment
+* python 3.6
+    * torch
+    * torchvision
+    * lightly
+    * numpy
+    * pandas
+    * sklearn
+    * tqdm
 
 ### step.1 
 * Simple Siamese NetでResNet34, EfficientNet_b0を自己教師あり学習
