@@ -3,7 +3,7 @@
 public: 0.6791, private: 0.6686
 
 ## Models
-* fusion (ResNet34 + EfficinetNet_b0)
+* fusion (ResNet34 + EfficinetNet_b0 -> 3 branches MLP)
     * ResNet34 (simsiam -> multitask)
     * EfficinetNet_b0 (simsiam -> multitask)
 
