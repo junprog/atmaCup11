@@ -11,7 +11,7 @@ public: 0.6791, private: 0.6686
 * multi task loss = MSE + material_BCEWithLogits + technique_BCEWithLogits
     * MSE(output1, target)
     * material_BCEWithLogits(output2, materials_class)
-    * technique_BCEWithLogits(output2, techniques_class)
+    * technique_BCEWithLogits(output3, techniques_class)
 
 * materils_class
     * 25種類　-> 最頻クラス上位5クラスピックアップ + 残り20クラスをotherクラス = 6クラスマルチラベル分類
