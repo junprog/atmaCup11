@@ -7,8 +7,9 @@ class NFNet(nn.Module):
         super().__init__()
         m = timm.create_model(arch, pretrained=False)
         self.feature = nn.Sequential(*list(m.children())[:-1])
-        self.fc = nn.Sequential(*list(m.children())[-1:])
-        self.fc.head = nn.Linear(3072, num_classes)
+        self.feature.add_module('global_pool', m.head.global_pool)
+
+        self.fc = nn.Linear(3072, num_classes)
 
     def forward(self, x):
         x = self.feature(x)
