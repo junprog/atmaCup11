@@ -20,6 +20,22 @@ class MultiTaskLoss(nn.Module):
 
         return loss
 
+class MultiTaskLoss_cls(nn.Module):
+    def __init__(self, is_mse=True):
+        super().__init__()
+        self.is_mse = is_mse
+
+        self.ce = nn.CrossEntropyLoss()
+        self.mate_bce_w_logits = nn.BCEWithLogitsLoss()
+        self.tech_bce_w_logits = nn.BCEWithLogitsLoss()
+    
+    def forward(self, outputs, target, mate, tech):
+        target_out, mate_out, tech_out = outputs
+
+        loss = self.ce(target_out, target.long()) + self.mate_bce_w_logits(mate_out, mate) + self.tech_bce_w_logits(tech_out, tech)
+
+        return loss
+
 class MultiTaskLoss_v2(nn.Module):
     def __init__(self, is_mse=True):
         super().__init__()
