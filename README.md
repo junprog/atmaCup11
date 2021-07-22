@@ -1,22 +1,27 @@
-# atmaCup#11 コード
+# atmaCup#11 16th 解法
+
+## step.1 Simple Siamese NetでResNet34, EfficientNet_b0を自己教師あり学習
 
 ```bash
-$ python tarin_simsiam.py --data-dir C:/Users/Junya/Desktop/dataset_atmaCup11/photos --batch-size 128
+$ python tarin_simsiam.py --data-dir [dataset dir path] --arch resnet34
+$ python tarin_simsiam.py --data-dir [dataset dir path] --arch efficientnet_b0
 ```
+
+## step.2 事前学習済モデルで初期化したResNet34, EfficientNet_b0 補助タスク付きモデルを学習
 
 ```bash
-$ python train_material.py --data-dir C:/Users/Junya/Desktop/dataset_atmaCup11 --batch-size 128
+$ python train_multitask.py --data-dir [dataset dir path] --arch resnet34 --init-weight-path [step.1で保存した学習済モデルpath]
+$ python train_multitask.py --data-dir [dataset dir path] --arch efficientnet_b0 --init-weight-path [step.1で保存した学習済モデルpath]
 ```
+
+## step.3 ResNet34, EfficientNet_b0 補助タスク付きモデルのフュージョンモデルを学習
 
 ```bash
-$ python train_fusion.py --data-dir /home/junya/Documents/dataset_atmaCup11/ --batch-size 128 --init-weight-path logs_simsiam/exp02-0710-182433/300_ckpt.tar --mate-res-dir logs_material/exp02-0712-000307 --tech-res-dir logs_technique/exp02-0712-025133
+$ python train__multitask.py --data-dir [dataset dir path] --arch fusion ## engine/multi_task_trainer.py 150, 151行目にstep.2で学習したモデルパスを指定
 ```
 
-* Materials
-class: 25 -> 5 にする
+## 推論
 
-* Techniques
-class: 10 -> 2 にする
-
-fusion_logs/exp02-0712-041745 : schedulerなし、StratifiedGroupKFold(うまく分割できてない？)
-fusion_logs/exp02-0712-063103 : schedulerあり、StratifiedKFold
+```bash
+$ python test_multitask.py --data-dir [dataset dir path] --arch fusion --res-dir [step.3で保存した学習済モデル]
+```
