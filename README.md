@@ -1,6 +1,6 @@
 # 16位 解法 (atmaCup#11)
 
-public: 0.6791, private: 0.6686
+public: 0.6802, private: 0.6686
 
 ## Models
 * fusion (ResNet34 + EfficinetNet_b0 -> 3 branches MLP)
